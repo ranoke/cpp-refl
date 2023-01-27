@@ -1,5 +1,7 @@
 #include <stdio.h>
 
+#include <string>
+#include <cassert>
 #include <type_traits>
 
 #include <stdint.h>
@@ -31,34 +33,33 @@
   __VA_OPT__(REFL_FOR_EACH_AGAIN_CTX REFL_PARENS (macro, ctx, __VA_ARGS__))
 #define REFL_FOR_EACH_AGAIN_CTX() REFL_FOR_EACH_HELPER_CTX
 
-#define REFL_TYPE_REGISTER(type, ret) \
-    ReflType _get_refl_type(type)     \
-    {                                 \
-        return ret;                   \
+#define REFL_TYPE_REGISTER(type, ret)             \
+    template<>                                    \
+    constexpr ReflType get_refl_type<type>(type*) \
+    {                                             \
+        return ret;                               \
     }
 
 #define REFL_DEF_MEMBER(obj, name) { REFL_TO_STRING(name), REFL_OFFSET_OF(obj, name), REFL_TYPE_OF(obj, name) },
 
-#define _REFL_DEF_MEMBERS(obj, ...) \
-    static refl::ReflMember members[] = { \
+#define _REFL_DEF_MEMBERS(obj, ...)                          \
+    static refl::ReflMember members[] = {                    \
         REFL_FOR_EACH_CTX(REFL_DEF_MEMBER, obj, __VA_ARGS__) \
     }
 
-#define _REFL_RET_REFLECTION(obj) \
-    return (refl::Refl){ \
-        .name = REFL_TO_STRING(obj), \
-        .members = members, \
+#define _REFL_RET_REFLECTION(obj)                  \
+    return (refl::Refl){                           \
+        .name = REFL_TO_STRING(obj),               \
+        .members = members,                        \
         .members_count = REFL_ARRAY_SIZE(members), \
     }
 
-#define REFL_DEF(name, ...) \
-    static refl::Refl _get_refl() \
-    { \
+#define REFL_DEF(name, ...)                   \
+    static refl::Refl _get_refl()             \
+    {                                         \
         _REFL_DEF_MEMBERS(name, __VA_ARGS__); \
-        _REFL_RET_REFLECTION(name); \
+        _REFL_RET_REFLECTION(name);           \
     }
-
-struct Name;
 
 namespace refl
 {
@@ -67,6 +68,7 @@ namespace refl
         REFL_TYPE_NONE,
         REFL_TYPE_OBJ,
         REFL_TYPE_STR,
+        REFL_TYPE_STD_STR,
         REFL_TYPE_U8,
         REFL_TYPE_I8,
         REFL_TYPE_U16,
@@ -93,6 +95,25 @@ namespace refl
         size_t members_count;
     };
 
+
+    template<typename T, typename = int>
+    struct HasRefl : std::false_type {};
+
+    template<typename T>
+    struct HasRefl <T, decltype((void) T::_get_refl, 0)> : std::true_type {};
+
+    template<typename T>
+    constexpr ReflType get_refl_type(T*)
+    {
+        if constexpr (std::is_class<T>::value)
+        {
+            static_assert(HasRefl<T>::value);
+            return REFL_TYPE_OBJ;
+        }
+        assert(false && "Debug");
+        return REFL_TYPE_NONE;
+    }
+
     REFL_TYPE_REGISTER(uint8_t,     REFL_TYPE_U8);
     REFL_TYPE_REGISTER(int8_t,      REFL_TYPE_I8);
     REFL_TYPE_REGISTER(uint16_t,    REFL_TYPE_U16);
@@ -104,13 +125,7 @@ namespace refl
     REFL_TYPE_REGISTER(const char*, REFL_TYPE_STR);
     REFL_TYPE_REGISTER(float,       REFL_TYPE_FLOAT);
     REFL_TYPE_REGISTER(double,      REFL_TYPE_DOUBLE);
-
-    template<typename T>
-    ReflType get_refl_type(T*)
-    {
-        if constexpr (std::is_class<T>::value) return REFL_TYPE_OBJ;
-        else return _get_refl_type(T{});
-    }
+    REFL_TYPE_REGISTER(std::string, REFL_TYPE_STD_STR);
 
 } // namespace refl
 
@@ -118,8 +133,10 @@ struct Name
 {
     uint32_t uid;
     const char* some_str;
+    std::string std_str;
+    uint8_t v;
 
-    REFL_DEF(Name, uid, some_str);
+    REFL_DEF(Name, uid, some_str, v, std_str);
 };
 
 struct Vec3
