@@ -1,5 +1,7 @@
 #include <stdio.h>
 
+#include <map>
+#include <vector>
 #include <string>
 #include <cassert>
 #include <type_traits>
@@ -22,14 +24,14 @@
 #define REFL_FOR_EACH(macro, ...)                                    \
   __VA_OPT__(REFL_EXPAND(REFL_FOR_EACH_HELPER(macro, __VA_ARGS__)))
 #define REFL_FOR_EACH_HELPER(macro, a1, ...)                         \
-  macro(a1)                                                     \
+  macro(a1)                                                          \
   __VA_OPT__(REFL_FOR_EACH_AGAIN REFL_PARENS (macro, __VA_ARGS__))
 #define REFL_FOR_EACH_AGAIN() REFL_FOR_EACH_HELPER
 
 #define REFL_FOR_EACH_CTX(macro, ctx, ...)                                    \
   __VA_OPT__(REFL_EXPAND(REFL_FOR_EACH_HELPER_CTX(macro, ctx, __VA_ARGS__)))
 #define REFL_FOR_EACH_HELPER_CTX(macro, ctx, a1, ...)                         \
-  macro(ctx, a1)                                                     \
+  macro(ctx, a1)                                                              \
   __VA_OPT__(REFL_FOR_EACH_AGAIN_CTX REFL_PARENS (macro, ctx, __VA_ARGS__))
 #define REFL_FOR_EACH_AGAIN_CTX() REFL_FOR_EACH_HELPER_CTX
 
@@ -41,24 +43,34 @@
     }
 
 #define REFL_DEF_MEMBER(obj, name) { REFL_TO_STRING(name), REFL_OFFSET_OF(obj, name), REFL_TYPE_OF(obj, name) },
+#define REFL_DEF_OBJECT(obj, name) refl::_get_obj_refl<decltype(obj::name)>(),
 
 #define _REFL_DEF_MEMBERS(obj, ...)                          \
     static refl::ReflMember members[] = {                    \
         REFL_FOR_EACH_CTX(REFL_DEF_MEMBER, obj, __VA_ARGS__) \
     }
 
-#define _REFL_RET_REFLECTION(obj)                  \
-    return (refl::Refl){                           \
+#define _REFL_DEF_OBJECTS(obj, ...)                          \
+    static refl::Refl* objects[] = {                         \
+        REFL_FOR_EACH_CTX(REFL_DEF_OBJECT, obj, __VA_ARGS__) \
+    }
+
+#define _REFL_DEF_REFLECTION(obj)                  \
+    static auto r = (refl::Refl){                  \
         .name = REFL_TO_STRING(obj),               \
         .members = members,                        \
         .members_count = REFL_ARRAY_SIZE(members), \
+        .objects = objects,                        \
+        .objects_count = REFL_ARRAY_SIZE(objects), \
     }
 
 #define REFL_DEF(name, ...)                   \
-    static refl::Refl _get_refl()             \
+    static refl::Refl* _get_refl()            \
     {                                         \
         _REFL_DEF_MEMBERS(name, __VA_ARGS__); \
-        _REFL_RET_REFLECTION(name);           \
+        _REFL_DEF_OBJECTS(name, __VA_ARGS__); \
+        _REFL_DEF_REFLECTION(name);           \
+        return &r;                            \
     }
 
 namespace refl
@@ -79,6 +91,8 @@ namespace refl
         REFL_TYPE_I64,
         REFL_TYPE_FLOAT,
         REFL_TYPE_DOUBLE,
+        REFL_TYPE_STD_VECTOR,
+        REFL_TYPE_STD_MAP,
     };
 
     struct ReflMember
@@ -93,8 +107,9 @@ namespace refl
         const char* name;
         ReflMember* members;
         size_t members_count;
+        Refl** objects;
+        size_t objects_count;
     };
-
 
     template<typename T, typename = int>
     struct HasRefl : std::false_type {};
@@ -127,48 +142,160 @@ namespace refl
     REFL_TYPE_REGISTER(double,      REFL_TYPE_DOUBLE);
     REFL_TYPE_REGISTER(std::string, REFL_TYPE_STD_STR);
 
+    template<typename T>
+    constexpr ReflType get_refl_type(std::vector<T>*)
+    {
+        return REFL_TYPE_STD_VECTOR;
+    }
+
+    template<typename K, typename V>
+    constexpr ReflType get_refl_type(std::map<K, V>*)
+    {
+        return REFL_TYPE_STD_MAP;
+    }
+
+    template<typename T>
+    constexpr ReflType get_vector_refl_type(std::vector<T>*)
+    {
+        return get_refl_type<T*>(nullptr);
+    }
+
+    template<typename T>
+    Refl* _get_obj_refl_helper(std::vector<T>)
+    {
+        static ReflMember members[] = {
+            { "", 3, get_refl_type<T>(nullptr) },
+        };
+        static auto r = (Refl){
+            .name = "",
+            .members = members,
+            .members_count = 1
+        };
+        return &r;
+    }
+
+    template<typename T>
+    constexpr Refl* _get_obj_refl()
+    {
+        // TODO ignore types like std::string
+        if constexpr (std::is_class<T>::value && HasRefl<T>::value)
+            return T::_get_refl();
+        else if constexpr (std::is_class<T>::value)
+            return _get_obj_refl_helper(T{});
+        else
+            return nullptr; // not an object
+    }
+
 } // namespace refl
+
+/* struct Name */
+/* { */
+/*     uint32_t uid; */
+/*     const char* some_str; */
+/*     std::string std_str; */
+/*     uint8_t v; */
+/*     std::vector<int> vec; */
+/*     std::map<std::string, int> m; */
+
+/*     REFL_DEF(Name, uid, some_str, v, std_str, vec, m); */
+/* }; */
+
+struct SomeObj
+{
+    int32_t val;
+    const char* text;
+
+    REFL_DEF(SomeObj, val, text);
+};
 
 struct Name
 {
-    uint32_t uid;
-    const char* some_str;
-    std::string std_str;
-    uint8_t v;
+    const char* name_xd;
+    uint64_t uid;
 
-    REFL_DEF(Name, uid, some_str, v, std_str);
+    SomeObj obj;
+
+    REFL_DEF(Name, name_xd, uid, obj);
 };
 
 struct Vec3
 {
     float x, y, z;
-    Name name;
     double b;
 
     int16_t bit16;
+    Name name;
 
-    REFL_DEF(Vec3, x, y, z, name, b, bit16);
+    REFL_DEF(Vec3, x, y, z, b, bit16, name);
 };
+
+struct Arr
+{
+    std::vector<int> vals;
+    Vec3 vec;
+
+    Name name;
+
+    REFL_DEF(Arr, vals, vec, name);
+};
+
+/*
+    {
+        "Arr": {
+            "vals": {1, 2, 3}
+        }
+    }
+ */
+
+void print_refl(refl::Refl reflection)
+{
+    printf("\t\"%s\": {\n", reflection.name);
+    for (size_t i = 0; i < reflection.members_count; i++)
+    {
+        if (reflection.members[i].type == refl::REFL_TYPE_STD_VECTOR)
+        {
+            printf("\t\t{ \"%s\", %d,  container of type %d },\n", reflection.members[i].name, reflection.members[i].type, reflection.objects[i]->members[0].type);
+        }
+        else if (reflection.members[i].type == refl::REFL_TYPE_OBJ)
+        {
+            auto ref = *reflection.objects[i];
+            print_refl(ref);
+        }
+        else
+            printf("\t\t{ \"%s\", %d },\n", reflection.members[i].name, reflection.members[i].type);
+    }
+    printf("\t}\n");
+}
+
 
 int main()
 {
-    auto reflection = Vec3::_get_refl();
-    printf("{\n\t\"%s\": {\n", reflection.name);
-    for (size_t i = 0; i < reflection.members_count; i++)
-    {
-        printf("\t\t{ \"%s\", %d },\n", reflection.members[i].name, reflection.members[i].type);
-    }
-    printf("\t}\n}\n");
+    //auto reflection = *refl::_get_obj_refl<decltype(Vec3::name)>();
 
-    reflection = Name::_get_refl();
-    printf("{\n\t\"%s\": {\n", reflection.name);
-    for (size_t i = 0; i < reflection.members_count; i++)
-    {
-        printf("\t\t{ \"%s\", %d },\n", reflection.members[i].name, reflection.members[i].type);
-    }
-    printf("\t}\n}\n");
+    auto reflection = *Arr::_get_refl();
+    printf("{\n");
+    print_refl(reflection);
+    printf("}\n");
 
     return 0;
+
+    /* reflection = *Vec3::_get_refl(); */
+    /* printf("{\n\t\"%s\": {\n", reflection.name); */
+    /* for (size_t i = 0; i < reflection.members_count; i++) */
+    /* { */
+    /*     printf("\t\t{ \"%s\", %d },\n", reflection.members[i].name, reflection.members[i].type); */
+    /* } */
+    /* printf("\t}\n}\n"); */
+
+    /* reflection = *Name::_get_refl(); */
+    /* printf("{\n\t\"%s\": {\n", reflection.name); */
+    /* for (size_t i = 0; i < reflection.members_count; i++) */
+    /* { */
+    /*     printf("\t\t{ \"%s\", %d },\n", reflection.members[i].name, reflection.members[i].type); */
+    /* } */
+    /* printf("\t}\n}\n"); */
+
+    /* return 0; */
 }
 
 
