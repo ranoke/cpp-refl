@@ -42,7 +42,7 @@
         return ret;                               \
     }
 
-#define REFL_DEF_MEMBER(obj, name) { REFL_TO_STRING(name), REFL_OFFSET_OF(obj, name), REFL_TYPE_OF(obj, name) },
+#define REFL_DEF_MEMBER(obj, name) { REFL_TO_STRING(name), REFL_OFFSET_OF(obj, name), REFL_TYPE_OF(obj, name), false },
 #define REFL_DEF_OBJECT(obj, name) refl::_get_obj_refl<decltype(obj::name)>(),
 
 #define _REFL_DEF_MEMBERS(obj, ...)                          \
@@ -100,6 +100,7 @@ namespace refl
         const char* name;
         size_t offset;
         ReflType type;
+        bool is_array;
     };
 
     struct Refl
@@ -161,15 +162,23 @@ namespace refl
     }
 
     template<typename T>
+    constexpr Refl* _get_obj_refl();
+
+    template<typename T>
     Refl* _get_obj_refl_helper(std::vector<T>)
     {
         static ReflMember members[] = {
             { "", 3, get_refl_type<T>(nullptr) },
         };
+        static Refl* objects[] = {
+            refl::_get_obj_refl<T>(),
+        };
         static auto r = (Refl){
             .name = "",
             .members = members,
-            .members_count = 1
+            .members_count = 1,
+            .objects = objects,
+            .objects_count = 1,
         };
         return &r;
     }
@@ -231,7 +240,7 @@ struct Vec3
 
 struct Arr
 {
-    std::vector<int> vals;
+    std::vector<std::vector<Name>> vals;
     Vec3 vec;
 
     Name name;
@@ -247,6 +256,18 @@ struct Arr
     }
  */
 
+void print_refl_vector(refl::Refl reflection)
+{
+    printf("{\n\t\t\"std::vector<%d>\":", reflection.members[0].type);
+    if (reflection.objects[0])
+        print_refl_vector(*reflection.objects[0]);
+    else
+    {
+        printf("{}");
+    }
+    printf("}\n");
+}
+
 void print_refl(refl::Refl reflection)
 {
     printf("\t\"%s\": {\n", reflection.name);
@@ -254,7 +275,8 @@ void print_refl(refl::Refl reflection)
     {
         if (reflection.members[i].type == refl::REFL_TYPE_STD_VECTOR)
         {
-            printf("\t\t{ \"%s\", %d,  container of type %d },\n", reflection.members[i].name, reflection.members[i].type, reflection.objects[i]->members[0].type);
+            /* printf("\t\t{ \"%s\", %d,  container of type %d },\n", reflection.members[i].name, reflection.members[i].type, reflection.objects[i]->members[0].type); */
+            print_refl_vector(*reflection.objects[i]);
         }
         else if (reflection.members[i].type == refl::REFL_TYPE_OBJ)
         {

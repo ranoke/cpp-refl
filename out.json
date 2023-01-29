@@ -1,27 +1,31 @@
 {
 	"Arr": {
-		{ "vals", 14,  container of type 14 },
+		"std::vector<14>": {
+			"std::vector<14>":{
+				"std::vector<2>":{}
+			}
+		},
 		"Vec3": {
-			{ "x", 12 },
-			{ "y", 12 },
-			{ "z", 12 },
-			{ "b", 13 },
-			{ "bit16", 7 },
+			"x": 12,
+			"y": 12,
+			"z": 12,
+			"b": 13,
+			"bit16": 7,
 			"Name": {
-				{ "name_xd", 2 },
-				{ "uid", 10 },
+				"name_xd": 2,
+				"uid": 10,
 				"SomeObj": {
-					{ "val", 9 },
-					{ "text", 2 },
+					"val": 9,
+					"text": 2
 				}
 			}
-		}
+		},
 		"Name": {
-			{ "name_xd", 2 },
-			{ "uid", 10 },
+			"name_xd": 2,
+			"uid": 10,
 			"SomeObj": {
-				{ "val", 9 },
-				{ "text", 2 },
+				"val": 9,
+				"text": 2
 			}
 		}
 	}
